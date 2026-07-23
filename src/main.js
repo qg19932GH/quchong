@@ -91,8 +91,15 @@ ipcMain.handle('move-to-trash', async (event, filePath) => {
     await shell.trashItem(filePath);
     return true;
   } catch (err) {
-    console.error(`Failed to move file to trash: ${filePath}`, err);
-    return false;
+    console.warn(`Failed to move file to trash: ${filePath}. Trying permanent deletion fallback (e.g. NAS/SMB share).`, err);
+    try {
+      // Fallback to permanent deletion if Recycle Bin is not supported (like on network mapped drives)
+      await fs.unlink(filePath);
+      return true;
+    } catch (unlinkErr) {
+      console.error(`Permanent deletion fallback also failed for: ${filePath}`, unlinkErr);
+      return false;
+    }
   }
 });
 
