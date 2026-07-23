@@ -24,8 +24,7 @@ const modalBodySingle = document.getElementById('modalBodySingle');
 const modalBodyGroup = document.getElementById('modalBodyGroup');
 const modalFileName = document.getElementById('modalFileName');
 const modalFilePath = document.getElementById('modalFilePath');
-const modalFileNameKeep = document.getElementById('modalFileNameKeep');
-const modalFilePathKeep = document.getElementById('modalFilePathKeep');
+const modalFileListKeep = document.getElementById('modalFileListKeep');
 const modalFileListDelete = document.getElementById('modalFileListDelete');
 const modalBtnCancel = document.getElementById('modalBtnCancel');
 const modalBtnConfirm = document.getElementById('modalBtnConfirm');
@@ -36,6 +35,7 @@ let duplicatesData = [];
 let fileToDelete = null; // { filePath, element, groupKey }
 let isGroupDelete = false;
 let groupToDelete = null; // { key, files }
+let filesToDeleteInGroup = [];
 
 // Helper: Format Bytes to human readable
 function formatBytes(bytes) {
@@ -283,12 +283,17 @@ function filterAndRenderList(query) {
     const filesContainer = document.createElement('div');
     filesContainer.className = 'group-files';
 
-    group.files.forEach(file => {
+    group.files.forEach((file, index) => {
       const fileItem = document.createElement('div');
       fileItem.className = 'file-item';
       fileItem.dataset.path = file.path;
 
+      const isChecked = index === 0 && group.key !== '[ADVERTISEMENT]';
+
       fileItem.innerHTML = `
+        <div class="file-select-wrapper">
+          <input type="checkbox" class="file-keep-checkbox" ${isChecked ? 'checked' : ''} title="勾选以保留此文件，未勾选的文件在一键去重时将被送入回收站">
+        </div>
         <div class="file-main-info">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-video-icon">
             <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
@@ -404,46 +409,72 @@ function showGroupDeleteConfirmation(group) {
   const keepSection = confirmModal.querySelector('.modal-section-keep');
   const deleteTitle = confirmModal.querySelector('.modal-section-delete .modal-section-title span');
 
-  if (isAd) {
-    if (keepSection) keepSection.style.display = 'none';
-    if (deleteTitle) {
-      deleteTitle.textContent = '移至回收站 (清理所有广告)';
-      deleteTitle.className = 'badge badge-danger';
-    }
-    
-    modalFileListDelete.innerHTML = '';
-    group.files.forEach(file => {
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <div class="modal-file-delete-name">${file.name}</div>
-        <div class="modal-file-delete-path">${file.path}</div>
-      `;
-      modalFileListDelete.appendChild(li);
+  // Query DOM to check the state of the checkmarks
+  const groupCard = document.querySelector(`.duplicate-group[data-key="${group.key}"]`);
+  let keepFiles = [];
+  let deleteFiles = [];
+
+  if (groupCard) {
+    const fileItems = groupCard.querySelectorAll('.file-item');
+    fileItems.forEach(item => {
+      const filePath = item.dataset.path;
+      if (item.classList.contains('is-deleted')) return;
+
+      const checkbox = item.querySelector('.file-keep-checkbox');
+      const isChecked = checkbox ? checkbox.checked : false;
+      const fileData = group.files.find(f => f.path === filePath);
+      
+      if (fileData) {
+        if (isChecked) {
+          keepFiles.push(fileData);
+        } else {
+          deleteFiles.push(fileData);
+        }
+      }
     });
   } else {
-    if (keepSection) keepSection.style.display = 'block';
-    if (deleteTitle) {
-      deleteTitle.textContent = '移至回收站 (清理重复)';
-      deleteTitle.className = 'badge badge-danger';
+    // Fallback if card is not found in DOM
+    if (isAd) {
+      deleteFiles = [...group.files];
+    } else {
+      keepFiles = [group.files[0]];
+      deleteFiles = group.files.slice(1);
     }
-    
-    // Best file to keep (first file because it is pre-sorted by size desc)
-    const keepFile = group.files[0];
-    modalFileNameKeep.textContent = keepFile.name;
-    modalFilePathKeep.textContent = keepFile.path;
-    
-    // Files to delete (the rest)
-    modalFileListDelete.innerHTML = '';
-    const deleteFiles = group.files.slice(1);
-    deleteFiles.forEach(file => {
+  }
+
+  filesToDeleteInGroup = deleteFiles;
+
+  // Render Keep Files list
+  if (keepFiles.length === 0) {
+    if (keepSection) keepSection.style.display = 'none';
+  } else {
+    if (keepSection) keepSection.style.display = 'block';
+    modalFileListKeep.innerHTML = '';
+    keepFiles.forEach(file => {
       const li = document.createElement('li');
       li.innerHTML = `
-        <div class="modal-file-delete-name">${file.name}</div>
-        <div class="modal-file-delete-path">${file.path}</div>
+        <div class="modal-file-keep-name">${file.name}</div>
+        <div class="modal-file-keep-path">${file.path}</div>
       `;
-      modalFileListDelete.appendChild(li);
+      modalFileListKeep.appendChild(li);
     });
   }
+
+  // Render Delete Files list
+  if (deleteTitle) {
+    deleteTitle.textContent = isAd ? '移至回收站 (清理所有广告)' : '移至回收站 (清理重复)';
+    deleteTitle.className = 'badge badge-danger';
+  }
+  
+  modalFileListDelete.innerHTML = '';
+  deleteFiles.forEach(file => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="modal-file-delete-name">${file.name}</div>
+      <div class="modal-file-delete-path">${file.path}</div>
+    `;
+    modalFileListDelete.appendChild(li);
+  });
   
   confirmModal.classList.add('active');
 }
@@ -517,43 +548,93 @@ modalBtnConfirm.addEventListener('click', async () => {
       }
     }
   } else {
-    // Group one-click deduplication / advertisement cleanup
+    // Group one-click deduplication / advertisement cleanup (respects custom checkboxes)
     if (groupToDelete) {
-      const isAd = groupToDelete.key === '[ADVERTISEMENT]';
-      const filesToTrash = isAd ? groupToDelete.files : groupToDelete.files.slice(1);
       let successCount = 0;
       let failedFiles = [];
+      const deletedPaths = [];
       
-      for (const file of filesToTrash) {
+      for (const file of filesToDeleteInGroup) {
         const success = await window.electronAPI.moveToTrash(file.path);
         if (success) {
           successCount++;
+          deletedPaths.push(file.path);
         } else {
           failedFiles.push(file.name);
         }
       }
       
       if (successCount > 0) {
-        // Fade out and remove group card since it's fully cleared
-        const groupCardElement = document.querySelector(`.duplicate-group[data-key="${groupToDelete.key}"]`);
-        if (groupCardElement) {
-          groupCardElement.style.opacity = '0';
-          groupCardElement.style.transform = 'translateY(10px)';
-          groupCardElement.style.transition = 'all 0.3s ease';
+        const groupKey = groupToDelete.key;
+        const groupIndex = duplicatesData.findIndex(g => g.key === groupKey);
+        
+        if (groupIndex !== -1) {
+          const group = duplicatesData[groupIndex];
           
-          setTimeout(() => {
-            groupCardElement.remove();
-            const idx = duplicatesData.findIndex(g => g.key === groupToDelete.key);
-            if (idx !== -1) {
-              duplicatesData.splice(idx, 1);
+          // Remove deleted files from group data
+          deletedPaths.forEach(path => {
+            const fIdx = group.files.findIndex(f => f.path === path);
+            if (fIdx !== -1) {
+              group.files.splice(fIdx, 1);
+            }
+            
+            // Mark the deleted file row in UI as deleted
+            const fileItemElement = Array.from(document.querySelectorAll('.file-item')).find(item => item.dataset.path === path);
+            if (fileItemElement) {
+              fileItemElement.classList.add('is-deleted');
+              const folderBtn = fileItemElement.querySelector('.btn-folder-action');
+              const trashBtn = fileItemElement.querySelector('.btn-trash-action');
+              const checkbox = fileItemElement.querySelector('.file-keep-checkbox');
+              if (folderBtn) folderBtn.style.pointerEvents = 'none';
+              if (trashBtn) trashBtn.style.pointerEvents = 'none';
+              if (checkbox) {
+                checkbox.checked = false;
+                checkbox.disabled = true;
+              }
+            }
+          });
+
+          // Check how many files are left in this group
+          const isAd = groupKey === '[ADVERTISEMENT]';
+          const shouldRemoveCard = isAd ? group.files.length === 0 : group.files.length <= 1;
+
+          if (shouldRemoveCard) {
+            // Fade out and remove the entire group card
+            const groupCardElement = document.querySelector(`.duplicate-group[data-key="${groupKey}"]`);
+            if (groupCardElement) {
+              groupCardElement.style.opacity = '0';
+              groupCardElement.style.transform = 'translateY(10px)';
+              groupCardElement.style.transition = 'all 0.3s ease';
+              
+              setTimeout(() => {
+                groupCardElement.remove();
+                duplicatesData.splice(groupIndex, 1);
+                updateSummaryAfterDeletion();
+              }, 300);
+            }
+          } else {
+            // Update the UI card stats for remaining files
+            const groupCardElement = document.querySelector(`.duplicate-group[data-key="${groupKey}"]`);
+            if (groupCardElement) {
+              const badge = groupCardElement.querySelector('.group-badge');
+              if (badge) badge.textContent = `${group.files.length} 个重复`;
+              
+              // Recalculate wasted size
+              const sizes = group.files.map(f => f.size);
+              const maxSize = Math.max(...sizes);
+              const totalSize = sizes.reduce((a, b) => a + b, 0);
+              const wastedSize = totalSize - maxSize;
+              
+              const sizeTextElement = groupCardElement.querySelector('.group-info span strong');
+              if (sizeTextElement) sizeTextElement.textContent = formatBytes(wastedSize);
             }
             updateSummaryAfterDeletion();
-          }, 300);
+          }
         }
       }
       
       if (failedFiles.length > 0) {
-        alert(`一键去重完毕，但有 ${failedFiles.length} 个重复文件删除失败，请手动确认：\n${failedFiles.join('\n')}`);
+        alert(`一键清理完毕，但有 ${failedFiles.length} 个文件删除失败，请手动确认：\n${failedFiles.join('\n')}`);
       }
     }
   }

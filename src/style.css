@@ -734,18 +734,39 @@ body {
   margin-bottom: 2px;
 }
 
-.modal-filename-keep {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--text-main);
+.modal-file-list-keep {
+  list-style-type: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.modal-file-list-keep li {
+  font-size: 0.8rem;
+  border-bottom: 1px dashed #d1fae5;
+  padding-bottom: 6px;
+}
+
+.modal-file-list-keep li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.modal-file-keep-name {
+  font-weight: 600;
+  color: var(--success-text);
   word-break: break-all;
 }
 
-.modal-filepath-keep {
-  font-size: 0.72rem;
+.modal-file-keep-path {
+  font-size: 0.7rem;
   color: var(--text-muted);
   font-family: Consolas, monospace;
   word-break: break-all;
+  margin-top: 1px;
 }
 
 .modal-file-list-delete {
@@ -807,5 +828,27 @@ body {
   border-color: var(--danger);
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
 }
+
+/* File Keep Selection Checkbox Styles */
+.file-select-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px 0 4px;
+}
+
+.file-keep-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--primary);
+  border-radius: 4px;
+  transition: transform 0.1s ease;
+}
+
+.file-keep-checkbox:hover {
+  transform: scale(1.1);
+}
+
 
 

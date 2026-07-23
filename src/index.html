@@ -120,10 +120,11 @@
         <p>确定要对此重复组进行“一键去重”吗？系统将：</p>
         <div class="modal-section-keep">
           <div class="modal-section-title">
-            <span class="badge badge-success">保留 (最大视频)</span>
+            <span class="badge badge-success">保留 (不被删除)</span>
           </div>
-          <p class="modal-filename-keep" id="modalFileNameKeep"></p>
-          <p class="modal-filepath-keep" id="modalFilePathKeep"></p>
+          <ul class="modal-file-list-keep" id="modalFileListKeep">
+            <!-- Dynamically populated -->
+          </ul>
         </div>
         <div class="modal-section-delete">
           <div class="modal-section-title">

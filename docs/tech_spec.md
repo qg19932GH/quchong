@@ -48,16 +48,32 @@
 
 ---
 
-## 4. 查重与排序算法实现
+## 4. 查重与广告聚合算法实现
 
-扫描后，主进程按照以下算法对文件进行比对和组装：
+扫描后，主进程与渲染进程协同按照以下算法对文件进行比对、清洗和组装：
 
-1.  **哈希分组**：
-    *   使用 `Map<string, Array<FileInfo>>` 临时存储特征码与文件列表。
-    *   对于每个检索到的视频文件，提取番号，如果番号有效，作为 Map 的 Key 将文件属性压入 Array。
-2.  **过滤去重**：
-    *   遍历 Map，删除 `value.length < 2` 的键值对（即非重复文件）。
-3.  **内排序**：
-    *   在每个重复 Array 内部，以 `size` 从大到小降序排列（确保首个文件是“最佳保留选项”）。
-4.  **外排序**：
-    *   重复组列表按 `files.length` (重复次数) 降序排列；如果重复次数一致，则以番号名称字母序排列。
+1.  **特征码解析 (Parser)**：
+    *   **优先号码匹配**：先运行正规 AV/Heyzo/FC2/无码日期码 正则捕获。若捕获成功，则通过 `extractSuffixes` 从号码后方的子串截取分段（PART/CD/DISC）与特典（SP/特典）后缀，格式化拼接后作为核心唯一 Key 返回。
+    *   **次级广告过滤**：若非正规号码视频，但其全名包含预设广告词，直接映射至统一唯一 Key `[ADVERTISEMENT]`。
+    *   **三级降级清洗 (Fallback)**：若不满足前两项，则使用正则剔除扩展名、中括号、质量指标以及特殊标点符号，提取纯净文件名核心为 Key，并同样附带后缀截取。
+2.  **哈希分组**：
+    *   使用 `Map<string, Array<FileInfo>>` 临时存储特征码与文件列表。若特征码不为 `null`，作为 Key 压入文件详情。
+3.  **过滤去重**：
+    *   遍历 Map，删除 `value.length < 2` 且键名不为 `[ADVERTISEMENT]` 的键值对（保留单广告文件的广告分组）。
+4.  **组内排序 (内排序)**：
+    *   在非 `[ADVERTISEMENT]` 分组内部，按照文件 `size` 大小从大到小降序排列（确保 `files[0]` 始终是最大/最佳文件，其余为重复待删件）。
+5.  **列表排序 (外排序)**：
+    *   广告分组 `[ADVERTISEMENT]` 在前端列表中优先置顶展示；其余重复组按 `files.length` (重复次数) 降序排列。
+
+---
+
+## 5. 编译与打包规范
+
+为满足极简交付，项目的 Electron 打包任务遵循以下标准：
+
+1.  **单目标构建 (Portable Only)**：
+    *   在 [package.json](file:///c:/Users/5A5851/Desktop/git/quchong/package.json) 中配置 Windows 编译目标为单一 `portable` 便携单文件可执行程序，不再产出安装向导 (`nsis`) 等 setup.exe 文件。
+2.  **产物命名**：
+    *   设置 `artifactName` 为 `视频去重工具_便携版_${version}.${ext}`，确保构建输出见名知义。
+3.  **GitHub Actions CI 编译**：
+    *   配置于 [.github/workflows/build.yml](file:///c:/Users/5A5851/Desktop/git/quchong/.github/workflows/build.yml) 中，在 `windows-latest` 虚拟机下完成依赖挂载、自动构建和 Release/Artifact 附件附着分发。
