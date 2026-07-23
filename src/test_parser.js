@@ -14,11 +14,11 @@ const testCases = [
   { input: 'heyzo-2345.mp4', expected: 'HEYZO-2345' },
   { input: 'heyzo2345.mkv', expected: 'HEYZO-2345' },
   { input: 'n1024.mp4', expected: 'N1024' },
-  { input: 'some_random_video_file.mp4', expected: null },
+  { input: 'some_random_video_file.mp4', expected: 'SOMERANDOMVIDEOFILE' },
   { input: 'part-1.mp4', expected: null },
   { input: 'vol-3.mp4', expected: null },
-  { input: 'episode-04.mp4', expected: null },
-  { input: 'www.t66y.com_video.mp4', expected: null }
+  { input: 'episode-04.mp4', expected: 'EPISODE04' },
+  { input: 'www.t66y.com_video.mp4', expected: 'WWWT66YCOMVIDEO' }
 ];
 
 console.log('--- Running Parser Tests ---');

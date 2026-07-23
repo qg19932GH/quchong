@@ -24,9 +24,11 @@
     ],
     "win": {
       "target": [
-        "nsis",
         "portable"
       ]
+    },
+    "portable": {
+      "artifactName": "${productName}_便携版_${version}.${ext}"
     }
   }
 }

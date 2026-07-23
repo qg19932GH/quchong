@@ -77,6 +77,31 @@ function extractVideoId(filename) {
     return tokyoHotMatch[1];
   }
 
+  // 6. Fallback: Clean name for regular duplicate videos (non-AV/non-FC2)
+  // Remove common video extension if present in upperName
+  let cleanName = upperName;
+  const lastDot = cleanName.lastIndexOf('.');
+  if (lastDot !== -1 && lastDot > cleanName.length - 6) {
+    cleanName = cleanName.substring(0, lastDot);
+  }
+
+  // Remove content in brackets, parenthesis and braces
+  cleanName = cleanName.replace(/\[.*?\]/g, ' ')
+                       .replace(/\(.*?\)/g, ' ')
+                       .replace(/\{.*?\}/g, ' ');
+
+  // Remove common quality / release indicators
+  cleanName = cleanName.replace(/[-_](?:HD|UNCENSORED|4K|1080P|720P|2K|C|CN|SUB|SUBBED)\b/gi, ' ');
+
+  // Keep letters, digits, and Chinese characters, and replace other punctuation/spaces with empty
+  cleanName = cleanName.replace(/[^A-Z0-9\u4e00-\u9fa5]/gi, '');
+
+  // Trim and ignore if name is generic or too short
+  const GENERIC_KEYS = new Set(['SAMPLE', 'INTRO', 'TRAILER', 'PREVIEW', 'TEST', 'TEMP', 'DEMO', 'VIDEO', 'MOVIE', 'PART1', 'PART2', 'PART3', 'VOL1', 'VOL2', 'VOL3']);
+  if (cleanName.length >= 3 && !GENERIC_KEYS.has(cleanName)) {
+    return cleanName;
+  }
+
   // If no patterns match, return null.
   return null;
 }
