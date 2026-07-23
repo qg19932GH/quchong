@@ -537,22 +537,36 @@ function updateMirrorFolders() {
           const isChecked = dIdx === 0;
           const count = pair.dirCounts.get(dir) || 0;
           const sizeStr = formatBytes(pair.dirSizes.get(dir) || 0);
+          const files = pair.dirFilesMap.get(dir) || [];
           return `
-            <div class="mirror-folder-row" data-path="${dir.replace(/"/g, '&quot;')}">
-              <div class="mirror-folder-info" style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
-                <input type="checkbox" class="folder-keep-checkbox" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; margin-right:8px; accent-color: var(--primary); cursor:pointer;" title="勾选保留该文件夹中的视频，未勾选的文件在一键去重时将被删除">
-                <span class="folder-label" style="${isChecked ? 'color:var(--success-text); font-weight:bold;' : 'color:var(--text-secondary); font-weight:bold;'}">
-                  ${isChecked ? '保留：' : '清理：'}
-                </span>
-                <span class="folder-path" title="${dir}">${shortenPath(dir)}</span>
-                <span class="folder-size-badge" style="font-size: 0.75rem; color: var(--text-secondary); margin-left: 6px; background-color: var(--primary-light); padding: 2px 8px; border-radius: 6px; font-weight: 500;">
-                  含 ${count} 个重复视频，占用 ${sizeStr}
-                </span>
+            <div class="mirror-folder-item-wrapper" style="border-bottom: 1px solid var(--border-color); padding: 8px 0; margin-bottom: 8px;">
+              <div class="mirror-folder-row" data-path="${dir.replace(/"/g, '&quot;')}" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                <div class="mirror-folder-info" style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+                  <input type="checkbox" class="folder-keep-checkbox" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; margin-right:8px; accent-color: var(--primary); cursor:pointer;" title="勾选保留该文件夹中的视频，未勾选的文件在一键去重时将被删除">
+                  <span class="folder-label" style="${isChecked ? 'color:var(--success-text); font-weight:bold;' : 'color:var(--text-secondary); font-weight:bold;'}">
+                    ${isChecked ? '保留：' : '清理：'}
+                  </span>
+                  <span class="folder-path" title="${dir}">${shortenPath(dir)}</span>
+                  <span class="folder-size-badge" style="font-size: 0.75rem; color: var(--text-secondary); margin-left: 6px; background-color: var(--primary-light); padding: 2px 8px; border-radius: 6px; font-weight: 500;">
+                    含 ${count} 个重复视频，占用 ${sizeStr}
+                  </span>
+                </div>
+                <button class="btn btn-secondary btn-sm btn-open-folder" data-path="${dir.replace(/"/g, '&quot;')}" style="padding: 5px 10px; font-size: 0.72rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                  打开目录
+                </button>
               </div>
-              <button class="btn btn-secondary btn-sm btn-open-folder" data-path="${dir.replace(/"/g, '&quot;')}" style="padding: 5px 10px; font-size: 0.72rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                打开目录
-              </button>
+              <div class="mirror-folder-details-toggle" style="margin-left: 32px; font-size: 0.72rem; color: var(--primary); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; user-select: none;" data-expanded="false">
+                <svg class="toggle-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s ease;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                展开视频清单
+              </div>
+              <div class="mirror-folder-files-list" style="display: none; margin-left: 32px; margin-top: 6px; padding: 8px 12px; background-color: rgba(255,255,255,0.4); border-left: 2px solid var(--primary-light); border-radius: 4px; max-height: 120px; overflow-y: auto;">
+                <ul style="list-style-type: disc; margin: 0; padding-left: 14px; font-size: 0.72rem; color: var(--text-secondary); line-height: 1.6;">
+                  ${files.map(f => `
+                    <li style="margin-bottom: 4px;" title="${f.path}">${f.name} <span style="color:var(--text-muted); font-size:0.68rem; margin-left:6px;">(${formatBytes(f.size)})</span></li>
+                  `).join('')}
+                </ul>
+              </div>
             </div>
           `;
         }).join('')}
@@ -571,6 +585,27 @@ function updateMirrorFolders() {
         } else {
           label.textContent = '清理：';
           label.style.color = 'var(--text-secondary)';
+        }
+      });
+    });
+
+    // Bind collapsible list toggle events
+    const toggles = card.querySelectorAll('.mirror-folder-details-toggle');
+    toggles.forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        const wrapper = toggle.closest('.mirror-folder-item-wrapper');
+        const list = wrapper.querySelector('.mirror-folder-files-list');
+        const arrow = toggle.querySelector('.toggle-arrow');
+        const isExpanded = toggle.dataset.expanded === 'true';
+        
+        if (isExpanded) {
+          list.style.display = 'none';
+          toggle.dataset.expanded = 'false';
+          toggle.innerHTML = `<svg class="toggle-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s ease;"><polyline points="9 18 15 12 9 6"></polyline></svg> 展开视频清单`;
+        } else {
+          list.style.display = 'block';
+          toggle.dataset.expanded = 'true';
+          toggle.innerHTML = `<svg class="toggle-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(90deg); transition: transform 0.2s ease;"><polyline points="9 18 15 12 9 6"></polyline></svg> 收起视频清单`;
         }
       });
     });
@@ -668,6 +703,7 @@ function detectMirrorFolderGroups(duplicates) {
         let totalFilesCount = 0;
         const dirSizes = new Map();
         const dirCounts = new Map();
+        const dirFilesMap = new Map();
 
         component.forEach(d => {
           const filesInDir = dirToFiles.get(d);
@@ -677,6 +713,7 @@ function detectMirrorFolderGroups(duplicates) {
           });
           dirSizes.set(d, sizeSum);
           dirCounts.set(d, filesInDir.length);
+          dirFilesMap.set(d, filesInDir);
           totalFilesCount += filesInDir.length;
         });
 
@@ -685,7 +722,8 @@ function detectMirrorFolderGroups(duplicates) {
           keys: Array.from(componentKeys),
           totalFilesCount,
           dirSizes,
-          dirCounts
+          dirCounts,
+          dirFilesMap
         });
       }
     }
