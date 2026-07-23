@@ -9,7 +9,7 @@ const testCases = [
   { input: '[1080p] abp-456_uncensored.mkv', expected: 'ABP-456' },
   { input: 'MIDE789.wmv', expected: 'MIDE-789' },
   { input: 'T28-123.mp4', expected: 'T28-123' },
-  { input: '1PONDO-123456_789.mp4', expected: '1PONDO-123456' },
+  { input: '1PONDO-123456_789.mp4', expected: '1PONDO-123456-789' },
   { input: '123456-789.mp4', expected: '123456-789' },
   { input: 'heyzo-2345.mp4', expected: 'HEYZO-2345' },
   { input: 'heyzo2345.mkv', expected: 'HEYZO-2345' },
@@ -17,8 +17,8 @@ const testCases = [
   { input: 'some_random_video_file.mp4', expected: 'SOMERANDOMVIDEOFILE' },
   { input: 'part-1.mp4', expected: null },
   { input: 'vol-3.mp4', expected: null },
-  { input: 'episode-04.mp4', expected: 'EPISODE04' },
-  { input: 'www.t66y.com_video.mp4', expected: 'WWWT66YCOMVIDEO' }
+  { input: 'episode-04.mp4', expected: null },
+  { input: 'www.t66y.com_video.mp4', expected: '[ADVERTISEMENT]' }
 ];
 
 console.log('--- Running Parser Tests ---');

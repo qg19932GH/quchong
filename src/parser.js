@@ -12,97 +12,159 @@ const BLACKLIST = new Set([
   'TOP', 'WIN', 'MAC', 'WEB', 'LINK', 'SITE', 'URL', 'HTTP', 'HTTPS', 'WWW'
 ]);
 
+function extractSuffixes(trailingStr) {
+  let part = '';
+  let sp = '';
+
+  if (!trailingStr) {
+    return { part, sp };
+  }
+
+  // 1. Check for SP indicators: SP1, SP2, SP, 特典, BONUS, EXTRA
+  const spMatch = trailingStr.match(/(?:^|[-_\s])(SP\d*|特典|BONUS|EXTRA)(?![A-Z0-9])/i);
+  if (spMatch) {
+    sp = spMatch[1].toUpperCase();
+  }
+
+  // 2. Check for Part indicators: CD1, DISC2, PART3, etc.
+  const partMatch = trailingStr.match(/(?:^|[-_\s])(CD|DISC|PART)[-_\s]*(\d+|[A-H])(?![A-Z0-9])/i);
+  if (partMatch) {
+    part = `${partMatch[1].toUpperCase()}${partMatch[2].toUpperCase()}`;
+  } else {
+    // Check for single digit or character in parenthesis or preceded by hyphen/underscore
+    // e.g. -1, _2, (3), (A)
+    const trailingWithoutExt = trailingStr.replace(/\.[a-z0-9]+$/i, '');
+    const singlePartMatch = trailingWithoutExt.match(/(?:[-_\s]|\(|（)([A-H]|\d+)(?:\)|）)?$/i);
+    if (singlePartMatch) {
+      const val = singlePartMatch[1];
+      // Exclude common quality/subtitle indicators to avoid false positives
+      if (val !== '4K' && val !== '2K' && val !== 'C' && val !== 'CN') {
+        part = val.toUpperCase();
+      }
+    }
+  }
+
+  return { part, sp };
+}
+
 function extractVideoId(filename) {
-  // Remove extension
-  const dotIndex = filename.lastIndexOf('.');
-  let name = dotIndex !== -1 ? filename.slice(0, dotIndex) : filename;
+  if (!filename) return null;
   
-  // Replace standard website domains with spaces to avoid interference (e.g. hjd2048.com, t66y.com)
-  name = name.replace(/\b[a-zA-Z0-9-]+\.(?:com|net|org|xyz|info|cc|me|vip|top|club|biz|co|click|asia|io|tv|us|cn|tk)\b/gi, ' ');
-  
-  // Normalize string to uppercase for parsing
-  const upperName = name.toUpperCase();
-  
+  // Normalize string by removing website domains permanently from the string we process
+  let cleanUpperName = filename.toUpperCase();
+  cleanUpperName = cleanUpperName.replace(/\b[A-Z0-9-]+\.(?:COM|NET|ORG|XYZ|INFO|CC|ME|VIP|TOP|CLUB|BIZ|CO|CLICK|ASIA|IO|TV|US|CN|TK)\b/g, ' ');
+
+  // Helper to format ID with suffixes
+  function formatWithSuffix(coreId, matchIndex, matchLength) {
+    const trailingStr = cleanUpperName.substring(matchIndex + matchLength);
+    const { part, sp } = extractSuffixes(trailingStr);
+    let result = coreId;
+    if (part) result += `-${part}`;
+    if (sp) result += `-${sp}`;
+    return result;
+  }
+
   // 1. Check for FC2 codes
-  // Patterns: FC2-1234567, FC2123456, FC2-PTS-123456, FC2_PTS_123456, etc.
-  // Use (?![0-9]) to ensure we capture the full digit sequence and avoid word boundary conflicts on trailing underscores
-  const fc2Match = upperName.match(/FC2(?:[-_\s]|PTS)*(?:PTS)?(?:[-_\s])*(\d{5,8})(?![0-9])/i);
+  const fc2Match = cleanUpperName.match(/FC2(?:[-_\s]|PTS)*(?:PTS)?(?:[-_\s])*(\d{5,8})(?![0-9])/i);
   if (fc2Match) {
-    return `FC2-${fc2Match[1]}`;
+    const coreId = `FC2-${fc2Match[1]}`;
+    return formatWithSuffix(coreId, fc2Match.index, fc2Match[0].length);
   }
   
   // 2. Check for Heyzo codes
-  // Patterns: HEYZO-1234, HEYZO1234
-  const heyzoMatch = upperName.match(/HEYZO(?:[-_\s])*(\d{3,5})(?![0-9])/i);
+  const heyzoMatch = cleanUpperName.match(/HEYZO(?:[-_\s])*(\d{3,5})(?![0-9])/i);
   if (heyzoMatch) {
-    return `HEYZO-${heyzoMatch[1]}`;
+    const coreId = `HEYZO-${heyzoMatch[1]}`;
+    return formatWithSuffix(coreId, heyzoMatch.index, heyzoMatch[0].length);
   }
 
   // 3. Check for standard AV codes
-  // Format: [PREFIX]-[DIGITS] or [PREFIX]_[DIGITS] or [PREFIX] [DIGITS]
-  // e.g. SSIS-123, abp-456, MIDE-789, T28-123, 1Pondo-123456 (often has numbers)
-  // PREFIX: 2 to 8 characters (letters and digits, must contain at least one letter)
-  // Use (?![0-9]) instead of \b to handle suffixes like _uncensored or _HD safely
-  const stdMatch = upperName.match(/(?:^|[^A-Z0-9])([A-Z0-9]{2,8})[-_\s]+(\d{3,6})(?![0-9])/);
+  const stdMatch = cleanUpperName.match(/(?:^|[^A-Z0-9])([A-Z0-9]{2,8})[-_\s]+(\d{3,6})(?![0-9])/);
   if (stdMatch) {
     const prefix = stdMatch[1];
     const digits = stdMatch[2];
-    // Check if prefix has at least one letter and is not in blacklist
     if (/[A-Z]/.test(prefix) && !BLACKLIST.has(prefix)) {
-      return `${prefix}-${digits}`;
+      const coreId = `${prefix}-${digits}`;
+      const prefixStart = cleanUpperName.indexOf(stdMatch[1], stdMatch.index);
+      const matchLength = (stdMatch.index + stdMatch[0].length) - prefixStart;
+      return formatWithSuffix(coreId, prefixStart, matchLength);
     }
   }
   
-  // 4. Check for standard AV codes directly concatenated, e.g. SSIS123, ABP001, ipx888
-  // Format: [LETTERS][DIGITS] where LETTERS is 3 to 6 chars, DIGITS is 3 to 5 chars
-  const concatMatch = upperName.match(/(?:^|[^A-Z])([A-Z]{3,6})(\d{3,5})(?![0-9])/);
+  // 4. Check for standard AV codes directly concatenated
+  const concatMatch = cleanUpperName.match(/(?:^|[^A-Z])([A-Z]{3,6})(\d{3,5})(?![0-9])/);
   if (concatMatch) {
     const prefix = concatMatch[1];
     const digits = concatMatch[2];
     if (!BLACKLIST.has(prefix)) {
-      return `${prefix}-${digits}`;
+      const coreId = `${prefix}-${digits}`;
+      const prefixStart = cleanUpperName.indexOf(concatMatch[1], concatMatch.index);
+      const matchLength = (concatMatch.index + concatMatch[0].length) - prefixStart;
+      return formatWithSuffix(coreId, prefixStart, matchLength);
     }
   }
 
   // 5. Check for Caribbeancom/Uncensored date codes
-  // Patterns: 123456-789, 123456_789 (usually 6 digits, hyphen/underscore, 3-4 digits)
-  const caribMatch = upperName.match(/(?:^|[^0-9])(\d{6})[-_](\d{3,4})(?![0-9])/);
+  const caribMatch = cleanUpperName.match(/(?:^|[^0-9])(\d{6})[-_](\d{3,4})(?![0-9])/);
   if (caribMatch) {
-    return `${caribMatch[1]}-${caribMatch[2]}`;
+    const coreId = `${caribMatch[1]}-${caribMatch[2]}`;
+    const startIdx = cleanUpperName.indexOf(caribMatch[1], caribMatch.index);
+    const matchLength = (caribMatch.index + caribMatch[0].length) - startIdx;
+    return formatWithSuffix(coreId, startIdx, matchLength);
   }
   
-  // Tokyo Hot format: n1234 or N1234
-  const tokyoHotMatch = upperName.match(/(?:^|[^A-Z0-9])(N\d{3,5})(?![0-9])/);
+  // Tokyo Hot format
+  const tokyoHotMatch = cleanUpperName.match(/(?:^|[^A-Z0-9])(N\d{3,5})(?![0-9])/);
   if (tokyoHotMatch) {
-    return tokyoHotMatch[1];
+    const coreId = tokyoHotMatch[1];
+    const startIdx = cleanUpperName.indexOf(tokyoHotMatch[1], tokyoHotMatch.index);
+    const matchLength = (tokyoHotMatch.index + tokyoHotMatch[0].length) - startIdx;
+    return formatWithSuffix(coreId, startIdx, matchLength);
+  }
+
+  // B. Check for Advertising Videos SECOND! (Only if standard patterns didn't match)
+  const AD_KEYWORDS = [
+    '社 區 最 新 情 報', '社区最新情报', '最新情报', '最新情報',
+    'hjd2048', '2048社区', 't66y', '地址发布', '发布地址',
+    '永久地址', '永久域名', '最新地址', '防迷路'
+  ];
+  for (const kw of AD_KEYWORDS) {
+    if (cleanUpperName.includes(kw.toUpperCase())) {
+      return '[ADVERTISEMENT]';
+    }
   }
 
   // 6. Fallback: Clean name for regular duplicate videos (non-AV/non-FC2)
-  // Remove common video extension if present in upperName
-  let cleanName = upperName;
+  let cleanName = cleanUpperName;
   const lastDot = cleanName.lastIndexOf('.');
   if (lastDot !== -1 && lastDot > cleanName.length - 6) {
     cleanName = cleanName.substring(0, lastDot);
   }
 
-  // Remove content in brackets, parenthesis and braces
+  // Preserve suffixes for fallback names too
+  const { part, sp } = extractSuffixes(cleanName);
+
   cleanName = cleanName.replace(/\[.*?\]/g, ' ')
                        .replace(/\(.*?\)/g, ' ')
                        .replace(/\{.*?\}/g, ' ');
 
-  // Remove common quality / release indicators
   cleanName = cleanName.replace(/[-_](?:HD|UNCENSORED|4K|1080P|720P|2K|C|CN|SUB|SUBBED)\b/gi, ' ');
-
-  // Keep letters, digits, and Chinese characters, and replace other punctuation/spaces with empty
   cleanName = cleanName.replace(/[^A-Z0-9\u4e00-\u9fa5]/gi, '');
 
-  // Trim and ignore if name is generic or too short
   const GENERIC_KEYS = new Set(['SAMPLE', 'INTRO', 'TRAILER', 'PREVIEW', 'TEST', 'TEMP', 'DEMO', 'VIDEO', 'MOVIE', 'PART1', 'PART2', 'PART3', 'VOL1', 'VOL2', 'VOL3']);
-  if (cleanName.length >= 3 && !GENERIC_KEYS.has(cleanName)) {
-    return cleanName;
+  
+  // Ignore fallback keys that represent generic series segment markers
+  if (/^(?:EPISODE|EP|PART|VOL|VOLUME)\d*$/i.test(cleanName)) {
+    return null;
   }
 
-  // If no patterns match, return null.
+  if (cleanName.length >= 3 && !GENERIC_KEYS.has(cleanName)) {
+    let result = cleanName;
+    if (part) result += `-${part}`;
+    if (sp) result += `-${sp}`;
+    return result;
+  }
+
   return null;
 }
 

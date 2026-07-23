@@ -90,7 +90,26 @@ const mockFiles = [
   { name: 'www.t66y.com_SSIS-023.avi', size: 1024 * 1024 * 900, isMp4: false },
   { name: 'MIDE789.wmv', size: 1024 * 1024 * 800, isMp4: false },
   { name: '[1080p] abp-456_uncensored.mkv', size: 1024 * 1024 * 1400, isMp4: false },
-  { name: 'part-1.mp4', size: 1024 * 1024 * 100, isMp4: true, duration: 600, w: 1280, h: 720 }
+  { name: 'part-1.mp4', size: 1024 * 1024 * 100, isMp4: true, duration: 600, w: 1280, h: 720 },
+
+  // --- NEW: Suffix and Advertisement Test Files ---
+  // Suffix case 1: Different parts (Should NOT be duplicates)
+  { name: 'FC2-1768915-1.mp4', size: 1024 * 1024 * 500, isMp4: true, duration: 2400, w: 1280, h: 720 },
+  { name: 'FC2-1768915-2.mp4', size: 1024 * 1024 * 480, isMp4: true, duration: 2300, w: 1280, h: 720 },
+  { name: 'FC2-PPV-3237415 (1).mp4', size: 1024 * 1024 * 600, isMp4: true, duration: 3000, w: 1280, h: 720 },
+  { name: 'FC2-PPV-3237415 (2).mp4', size: 1024 * 1024 * 610, isMp4: true, duration: 3100, w: 1280, h: 720 },
+
+  // Suffix case 2: Special / 特典 videos (Should NOT be duplicates of main, but can be duplicate of themselves in subdirs)
+  { name: 'FC2-3584435.mp4', size: 1024 * 1024 * 900, isMp4: true, duration: 4800, w: 1920, h: 1080 },
+  { name: 'FC2-3584435_sp1.mp4', size: 1024 * 1024 * 150, isMp4: true, duration: 600, w: 1280, h: 720 },
+  { name: 'FC2-3584435_sp2.mp4', size: 1024 * 1024 * 120, isMp4: true, duration: 500, w: 1280, h: 720 },
+  // Duplicate of SP1 in a sub-path
+  { name: 'subfolder/FC2-3584435_sp1.mp4', size: 1024 * 1024 * 145, isMp4: true, duration: 600, w: 1280, h: 720 },
+
+  // Advertisements (Will group under [ADVERTISEMENT] and clear all)
+  { name: '社 區 最 新 情 報.mp4', size: 1024 * 1024 * 5, isMp4: true, duration: 30, w: 640, h: 360 },
+  { name: '社区最新情报_2048.mp4', size: 1024 * 1024 * 4, isMp4: true, duration: 25, w: 640, h: 360 },
+  { name: '永久地址发布_t66y.avi', size: 1024 * 1024 * 3, isMp4: false }
 ];
 
 console.log('Creating mock videos in:', mockDir);
@@ -98,6 +117,9 @@ console.log('Creating mock videos in:', mockDir);
 mockFiles.forEach(file => {
   const filePath = path.join(mockDir, file.name);
   try {
+    // Create parent directory recursively if needed
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+
     let headerBuffer = Buffer.alloc(0);
     if (file.isMp4 && file.duration) {
       headerBuffer = createMinimalMp4Buffer(file.duration, file.w, file.h);

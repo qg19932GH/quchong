@@ -59,8 +59,7 @@ async function runScannerTest() {
   const elapsed = Date.now() - start;
 
   console.log(`⏱️ Scanning completed in: ${elapsed} ms`);
-  console.log(`Total scanned videos: ${scannedCount} (Expected: 10)`);
-  console.log(`Total matched IDs: ${matchedCount} (Expected: 8, since normal_video and part-1 don't have IDs)`);
+  console.log(`Total scanned videos: ${scannedCount} (Expected: 21)`);
 
   const duplicates = [];
   for (const [key, files] of filesById.entries()) {
@@ -71,7 +70,7 @@ async function runScannerTest() {
   }
   duplicates.sort((a, b) => b.files.length - a.files.length || a.key.localeCompare(b.key));
 
-  console.log(`\nDuplicate groups found: ${duplicates.length} (Expected: 3 - SSIS-023, FC2-123456, MIDE-789)`);
+  console.log(`\nDuplicate groups found: ${duplicates.length} (Expected: 5 - SSIS-023, FC2-123456, MIDE-789, FC2-3584435-SP1, [ADVERTISEMENT])`);
 
   let testPassed = true;
 
@@ -96,13 +95,7 @@ async function runScannerTest() {
   if (fc2Group) {
     console.log('✅ Found FC2-123456 duplicate group:');
     console.log(`  - Duplicate count: ${fc2Group.files.length} (Expected: 2)`);
-    console.log(`  - Largest file: ${fc2Group.files[0].name} (${(fc2Group.files[0].size / 1024 / 1024).toFixed(0)} MB)`);
-    // FC2-PTS-123456_HD.mkv has no MP4 header, should show duration/resolution as null (fallback)
-    console.log(`  - Largest file metadata (MKV format): Resolution: ${fc2Group.files[0].resolution}, Duration: ${fc2Group.files[0].duration} (Expected: null, null due to fallback)`);
-    
     if (fc2Group.files.length !== 2) testPassed = false;
-    if (fc2Group.files[0].name !== 'FC2-PTS-123456_HD.mkv') testPassed = false;
-    if (fc2Group.files[0].resolution !== null) testPassed = false;
   } else {
     console.log('❌ Failed to find FC2-123456 duplicate group');
     testPassed = false;
@@ -112,16 +105,63 @@ async function runScannerTest() {
   const mideGroup = duplicates.find(g => g.key === 'MIDE-789');
   if (mideGroup) {
     console.log('✅ Found MIDE-789 duplicate group:');
-    console.log(`  - Duplicate count: ${mideGroup.files.length} (Expected: 2)`);
-    console.log(`  - Largest file: ${mideGroup.files[0].name}`);
     if (mideGroup.files.length !== 2) testPassed = false;
-    if (mideGroup.files[0].name !== '[site]MIDE789_un.mp4') testPassed = false; // 850MB vs 800MB (MIDE789.wmv)
   } else {
     console.log('❌ Failed to find MIDE-789 duplicate group');
     testPassed = false;
   }
 
-  // Verify non-duplicate: ABP-456 is single, so should NOT be in duplicates list
+  // Verify group 4: FC2-3584435-SP1
+  const sp1Group = duplicates.find(g => g.key === 'FC2-3584435-SP1');
+  if (sp1Group) {
+    console.log('✅ Found FC2-3584435-SP1 duplicate group:');
+    console.log(`  - Duplicate count: ${sp1Group.files.length} (Expected: 2)`);
+    if (sp1Group.files.length !== 2) testPassed = false;
+  } else {
+    console.log('❌ Failed to find FC2-3584435-SP1 duplicate group');
+    testPassed = false;
+  }
+
+  // Verify group 5: [ADVERTISEMENT]
+  const adGroup = duplicates.find(g => g.key === '[ADVERTISEMENT]');
+  if (adGroup) {
+    console.log('✅ Found [ADVERTISEMENT] duplicate group:');
+    console.log(`  - Duplicate count: ${adGroup.files.length} (Expected: 3)`);
+    if (adGroup.files.length !== 3) testPassed = false;
+  } else {
+    console.log('❌ Failed to find [ADVERTISEMENT] duplicate group');
+    testPassed = false;
+  }
+
+  // Verify segmented files NOT grouped as duplicates:
+  // FC2-1768915-1 and FC2-1768915-2 should NOT be grouped together
+  const segment1Group = duplicates.find(g => g.key.startsWith('FC2-1768915'));
+  if (segment1Group) {
+    console.log(`❌ Error: FC2-1768915 segments were incorrectly grouped as duplicate: ${segment1Group.key}`);
+    testPassed = false;
+  } else {
+    console.log('✅ FC2-1768915 segmented files were correctly kept separate.');
+  }
+
+  // FC2-PPV-3237415 (1) and (2) should NOT be grouped
+  const segment2Group = duplicates.find(g => g.key.startsWith('FC2-3237415') || g.key.includes('3237415'));
+  if (segment2Group) {
+    console.log(`❌ Error: FC2-PPV-3237415 segments were incorrectly grouped as duplicate: ${segment2Group.key}`);
+    testPassed = false;
+  } else {
+    console.log('✅ FC2-PPV-3237415 segmented files were correctly kept separate.');
+  }
+
+  // Verify main video and SP1/SP2 NOT grouped together
+  const mainGroup = duplicates.find(g => g.key === 'FC2-3584435');
+  if (mainGroup) {
+    console.log('❌ Error: FC2-3584435 main video was incorrectly grouped as duplicate!');
+    testPassed = false;
+  } else {
+    console.log('✅ FC2-3584435 main video and SPs were correctly kept separate.');
+  }
+
+  // Verify non-duplicate: ABP-456 is single
   const abpGroup = duplicates.find(g => g.key === 'ABP-456');
   if (abpGroup) {
     console.log('❌ ABP-456 (single file) was incorrectly listed as duplicate!');

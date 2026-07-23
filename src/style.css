@@ -783,3 +783,29 @@ body {
   margin-top: 1px;
 }
 
+/* Advertising Warning Card and Badge Styles */
+.ad-group {
+  border: 1px dashed #fca5a5 !important;
+  background-color: #fffafb !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.04) !important;
+}
+
+.ad-badge {
+  background-color: var(--danger-light) !important;
+  color: var(--danger-text) !important;
+}
+
+.ad-group .btn-group-dedup {
+  background-color: var(--danger-light);
+  color: var(--danger-text);
+  border: 1px solid #fecdd3;
+}
+
+.ad-group .btn-group-dedup:hover {
+  background-color: var(--danger);
+  color: #ffffff;
+  border-color: var(--danger);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
+}
+
+

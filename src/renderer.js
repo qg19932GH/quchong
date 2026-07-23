@@ -240,32 +240,40 @@ function filterAndRenderList(query) {
   emptyState.style.display = 'none';
 
   filtered.forEach(group => {
-    // Calculate total wasted size (files - 1 size)
+    const isAd = group.key === '[ADVERTISEMENT]';
+
+    // Calculate total wasted size (files - 1 size, or all if ad)
     const sizes = group.files.map(f => f.size);
     const maxSize = Math.max(...sizes);
     const totalSize = sizes.reduce((a, b) => a + b, 0);
-    const wastedSize = totalSize - maxSize; // Estimate wasted space
+    const wastedSize = isAd ? totalSize : (totalSize - maxSize); // Estimate wasted space
 
     const groupCard = document.createElement('div');
-    groupCard.className = 'duplicate-group';
+    groupCard.className = isAd ? 'duplicate-group ad-group' : 'duplicate-group';
     groupCard.dataset.key = group.key;
+
+    const groupKeyText = isAd ? '⚠️ 广告宣传视频' : group.key;
+    const badgeText = isAd ? `${group.files.length} 个广告` : `${group.files.length} 个重复`;
+    const badgeClass = isAd ? 'group-badge ad-badge' : 'group-badge';
+    const buttonText = isAd ? '一键清理广告' : '一键去重';
+    const buttonTitle = isAd ? '清理所有广告视频，一个不留' : '一键去重（保留最大文件，清理其余重复视频）';
 
     // Header
     const headerHtml = `
       <div class="group-header">
         <div class="group-title">
-          <span class="group-key">${group.key}</span>
-          <span class="group-badge">${group.files.length} 个重复</span>
+          <span class="group-key">${groupKeyText}</span>
+          <span class="${badgeClass}">${badgeText}</span>
         </div>
         <div class="group-actions">
-          <span class="group-info">重复占用空间: <strong>${formatBytes(wastedSize)}</strong></span>
-          <button class="btn btn-group-dedup" title="一键去重（保留最大文件，清理其余重复视频）">
+          <span class="group-info">${isAd ? '垃圾广告体积' : '重复占用空间'}: <strong>${formatBytes(wastedSize)}</strong></span>
+          <button class="btn btn-group-dedup" title="${buttonTitle}">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
-            一键去重
+            ${buttonText}
           </button>
         </div>
       </div>
@@ -387,27 +395,55 @@ function showGroupDeleteConfirmation(group) {
   isGroupDelete = true;
   groupToDelete = group;
   
-  modalTitle.textContent = '一键去重确认';
+  const isAd = group.key === '[ADVERTISEMENT]';
+  modalTitle.textContent = isAd ? '一键清理广告确认' : '一键去重确认';
   modalBodySingle.style.display = 'none';
   modalBodyGroup.style.display = 'flex';
   modalBodyGroup.style.flexDirection = 'column';
-  
-  // Best file to keep (first file because it is pre-sorted by size desc)
-  const keepFile = group.files[0];
-  modalFileNameKeep.textContent = keepFile.name;
-  modalFilePathKeep.textContent = keepFile.path;
-  
-  // Files to delete (the rest)
-  modalFileListDelete.innerHTML = '';
-  const deleteFiles = group.files.slice(1);
-  deleteFiles.forEach(file => {
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <div class="modal-file-delete-name">${file.name}</div>
-      <div class="modal-file-delete-path">${file.path}</div>
-    `;
-    modalFileListDelete.appendChild(li);
-  });
+
+  const keepSection = confirmModal.querySelector('.modal-section-keep');
+  const deleteTitle = confirmModal.querySelector('.modal-section-delete .modal-section-title span');
+
+  if (isAd) {
+    if (keepSection) keepSection.style.display = 'none';
+    if (deleteTitle) {
+      deleteTitle.textContent = '移至回收站 (清理所有广告)';
+      deleteTitle.className = 'badge badge-danger';
+    }
+    
+    modalFileListDelete.innerHTML = '';
+    group.files.forEach(file => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="modal-file-delete-name">${file.name}</div>
+        <div class="modal-file-delete-path">${file.path}</div>
+      `;
+      modalFileListDelete.appendChild(li);
+    });
+  } else {
+    if (keepSection) keepSection.style.display = 'block';
+    if (deleteTitle) {
+      deleteTitle.textContent = '移至回收站 (清理重复)';
+      deleteTitle.className = 'badge badge-danger';
+    }
+    
+    // Best file to keep (first file because it is pre-sorted by size desc)
+    const keepFile = group.files[0];
+    modalFileNameKeep.textContent = keepFile.name;
+    modalFilePathKeep.textContent = keepFile.path;
+    
+    // Files to delete (the rest)
+    modalFileListDelete.innerHTML = '';
+    const deleteFiles = group.files.slice(1);
+    deleteFiles.forEach(file => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="modal-file-delete-name">${file.name}</div>
+        <div class="modal-file-delete-path">${file.path}</div>
+      `;
+      modalFileListDelete.appendChild(li);
+    });
+  }
   
   confirmModal.classList.add('active');
 }
@@ -481,10 +517,10 @@ modalBtnConfirm.addEventListener('click', async () => {
       }
     }
   } else {
-    // Group one-click deduplication
+    // Group one-click deduplication / advertisement cleanup
     if (groupToDelete) {
-      const keepFile = groupToDelete.files[0];
-      const filesToTrash = groupToDelete.files.slice(1);
+      const isAd = groupToDelete.key === '[ADVERTISEMENT]';
+      const filesToTrash = isAd ? groupToDelete.files : groupToDelete.files.slice(1);
       let successCount = 0;
       let failedFiles = [];
       
@@ -498,7 +534,7 @@ modalBtnConfirm.addEventListener('click', async () => {
       }
       
       if (successCount > 0) {
-        // Fade out and remove group card since it has only 1 file left (the keepFile)
+        // Fade out and remove group card since it's fully cleared
         const groupCardElement = document.querySelector(`.duplicate-group[data-key="${groupToDelete.key}"]`);
         if (groupCardElement) {
           groupCardElement.style.opacity = '0';
