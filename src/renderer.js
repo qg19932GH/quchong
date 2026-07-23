@@ -535,14 +535,19 @@ function updateMirrorFolders() {
       <div class="mirror-card-body">
         ${pair.directories.map((dir, dIdx) => {
           const isChecked = dIdx === 0;
+          const count = pair.dirCounts.get(dir) || 0;
+          const sizeStr = formatBytes(pair.dirSizes.get(dir) || 0);
           return `
             <div class="mirror-folder-row" data-path="${dir.replace(/"/g, '&quot;')}">
-              <div class="mirror-folder-info">
+              <div class="mirror-folder-info" style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
                 <input type="checkbox" class="folder-keep-checkbox" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; margin-right:8px; accent-color: var(--primary); cursor:pointer;" title="勾选保留该文件夹中的视频，未勾选的文件在一键去重时将被删除">
                 <span class="folder-label" style="${isChecked ? 'color:var(--success-text); font-weight:bold;' : 'color:var(--text-secondary); font-weight:bold;'}">
                   ${isChecked ? '保留：' : '清理：'}
                 </span>
                 <span class="folder-path" title="${dir}">${shortenPath(dir)}</span>
+                <span class="folder-size-badge" style="font-size: 0.75rem; color: var(--text-secondary); margin-left: 6px; background-color: var(--primary-light); padding: 2px 8px; border-radius: 6px; font-weight: 500;">
+                  含 ${count} 个重复视频，占用 ${sizeStr}
+                </span>
               </div>
               <button class="btn btn-secondary btn-sm btn-open-folder" data-path="${dir.replace(/"/g, '&quot;')}" style="padding: 5px 10px; font-size: 0.72rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
@@ -602,10 +607,10 @@ function detectMirrorFolderGroups(duplicates) {
       const dir = file.path.substring(0, file.path.lastIndexOf(file.path.includes('\\') ? '\\' : '/'));
       if (!dirToKeys.has(dir)) {
         dirToKeys.set(dir, new Set());
-        dirToFiles.set(dir, new Set());
+        dirToFiles.set(dir, []);
       }
       dirToKeys.get(dir).add(group.key);
-      dirToFiles.get(dir).add(file.path);
+      dirToFiles.get(dir).push(file);
     });
   });
 
@@ -661,14 +666,26 @@ function detectMirrorFolderGroups(duplicates) {
         });
 
         let totalFilesCount = 0;
+        const dirSizes = new Map();
+        const dirCounts = new Map();
+
         component.forEach(d => {
-          totalFilesCount += dirToFiles.get(d).size;
+          const filesInDir = dirToFiles.get(d);
+          let sizeSum = 0;
+          filesInDir.forEach(file => {
+            sizeSum += file.size;
+          });
+          dirSizes.set(d, sizeSum);
+          dirCounts.set(d, filesInDir.length);
+          totalFilesCount += filesInDir.length;
         });
 
         groups.push({
           directories: component.sort(),
           keys: Array.from(componentKeys),
-          totalFilesCount
+          totalFilesCount,
+          dirSizes,
+          dirCounts
         });
       }
     }
