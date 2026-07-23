@@ -36,6 +36,9 @@ let fileToDelete = null; // { filePath, element, groupKey }
 let isGroupDelete = false;
 let groupToDelete = null; // { key, files }
 let filesToDeleteInGroup = [];
+let isFolderDelete = false;
+let folderPairIndexToDelete = null;
+let activeMirrorFolders = [];
 
 // Helper: Format Bytes to human readable
 function formatBytes(bytes) {
@@ -215,12 +218,19 @@ function renderResults(results) {
   summaryText.innerHTML = `共扫描到 <strong style="color:var(--primary)">${results.scannedCount}</strong> 个视频文件，识别出 <strong style="color:var(--primary)">${results.matchedCount}</strong> 个带番号的视频。共发现 <strong style="color:var(--danger)">${duplicatesData.length}</strong> 组重复文件。`;
   
   searchInput.value = ''; // Clear search
+  updateMirrorFolders();  // Compute and draw mirror folders panel
   filterAndRenderList('');
 }
 
 // Filter and render list based on search query
 function filterAndRenderList(query) {
   duplicateList.innerHTML = '';
+
+  // Hide mirror folders panel during searches for a clean interface
+  if (mirrorSection) {
+    mirrorSection.style.display = query ? 'none' : (activeMirrorFolders.length > 0 ? 'flex' : 'none');
+  }
+
   const filtered = duplicatesData.filter(group => {
     if (!query) return true;
     const q = query.toUpperCase();
@@ -479,21 +489,309 @@ function showGroupDeleteConfirmation(group) {
   confirmModal.classList.add('active');
 }
 
+// --- NEW: Mirror Folders Batch Deduplicator ---
+
+const mirrorSection = document.getElementById('mirrorSection');
+
+function shortenPath(p, maxLen = 65) {
+  if (p.length <= maxLen) return p;
+  const drive = p.substring(0, 15);
+  const end = p.substring(p.length - (maxLen - 18));
+  return `${drive}...${end}`;
+}
+
+function updateMirrorFolders() {
+  if (!mirrorSection) return;
+  mirrorSection.innerHTML = '';
+  
+  activeMirrorFolders = detectMirrorFolders(duplicatesData);
+  
+  if (activeMirrorFolders.length === 0) {
+    mirrorSection.style.display = 'none';
+    return;
+  }
+  
+  mirrorSection.style.display = 'flex';
+  
+  activeMirrorFolders.forEach((pair, index) => {
+    const card = document.createElement('div');
+    card.className = 'mirror-card';
+    card.innerHTML = `
+      <div class="mirror-card-header">
+        <div class="mirror-card-title-group">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mirror-folder-icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          <h4>检测到镜像重复文件夹 (两文件夹包含多组相同视频)</h4>
+        </div>
+        <span class="badge-mirror">共 ${pair.count} 个视频完全相同</span>
+      </div>
+      <div class="mirror-card-body">
+        <div class="mirror-folder-row">
+          <div class="mirror-folder-info">
+            <span class="folder-label" style="color:var(--success-text)">文件夹 A:</span>
+            <span class="folder-path" title="${pair.dirA}">${shortenPath(pair.dirA)}</span>
+          </div>
+          <button class="btn btn-primary btn-sm btn-keep-folder" data-keep="A" data-index="${index}" style="background-color: var(--success); border-color: var(--success); color:#fff;">
+            保留 A，清理 B
+          </button>
+        </div>
+        <div class="mirror-folder-row">
+          <div class="mirror-folder-info">
+            <span class="folder-label" style="color:var(--danger-text)">文件夹 B:</span>
+            <span class="folder-path" title="${pair.dirB}">${shortenPath(pair.dirB)}</span>
+          </div>
+          <button class="btn btn-primary btn-sm btn-keep-folder" data-keep="B" data-index="${index}">
+            保留 B，清理 A
+          </button>
+        </div>
+      </div>
+    `;
+    mirrorSection.appendChild(card);
+  });
+
+  // Bind keep folder buttons click event
+  const keepFolderButtons = mirrorSection.querySelectorAll('.btn-keep-folder');
+  keepFolderButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index);
+      const keep = btn.dataset.keep;
+      const pair = activeMirrorFolders[idx];
+      showFolderDeleteConfirmation(pair, keep, idx);
+    });
+  });
+}
+
+function detectMirrorFolders(duplicates) {
+  const pairMap = new Map();
+
+  duplicates.forEach(group => {
+    if (group.key === '[ADVERTISEMENT]') return;
+
+    for (let i = 0; i < group.files.length; i++) {
+      for (let j = i + 1; j < group.files.length; j++) {
+        const fileA = group.files[i];
+        const fileB = group.files[j];
+        
+        const dirA = fileA.path.substring(0, fileA.path.lastIndexOf(fileA.path.includes('\\') ? '\\' : '/'));
+        const dirB = fileB.path.substring(0, fileB.path.lastIndexOf(fileB.path.includes('\\') ? '\\' : '/'));
+        
+        if (dirA !== dirB) {
+          const sortedDirs = [dirA, dirB].sort();
+          const key = `${sortedDirs[0]}|${sortedDirs[1]}`;
+          
+          if (!pairMap.has(key)) {
+            pairMap.set(key, []);
+          }
+          
+          const fileInDir0 = fileA.path.startsWith(sortedDirs[0]) ? fileA : fileB;
+          const fileInDir1 = fileA.path.startsWith(sortedDirs[0]) ? fileB : fileA;
+
+          pairMap.get(key).push({
+            file0: fileInDir0,
+            file1: fileInDir1,
+            groupKey: group.key
+          });
+        }
+      }
+    }
+  });
+
+  const mirrorFolders = [];
+  for (const [key, pairs] of pairMap.entries()) {
+    if (pairs.length >= 2) {
+      const [dirA, dirB] = key.split('|');
+      mirrorFolders.push({
+        dirA,
+        dirB,
+        count: pairs.length,
+        pairs
+      });
+    }
+  }
+
+  mirrorFolders.sort((a, b) => b.count - a.count);
+  return mirrorFolders;
+}
+
+function showFolderDeleteConfirmation(pair, keep, pairIndex) {
+  isGroupDelete = false;
+  isFolderDelete = true;
+  folderPairIndexToDelete = pairIndex;
+  
+  const keepDir = keep === 'A' ? pair.dirA : pair.dirB;
+  const deleteDir = keep === 'A' ? pair.dirB : pair.dirA;
+
+  modalTitle.textContent = '批量清理镜像文件夹';
+  modalBodySingle.style.display = 'none';
+  modalBodyGroup.style.display = 'flex';
+  modalBodyGroup.style.flexDirection = 'column';
+
+  const keepSection = confirmModal.querySelector('.modal-section-keep');
+  const deleteTitle = confirmModal.querySelector('.modal-section-delete .modal-section-title span');
+
+  if (keepSection) keepSection.style.display = 'block';
+  if (deleteTitle) {
+    deleteTitle.textContent = '移至回收站 (批量清理重复)';
+    deleteTitle.className = 'badge badge-danger';
+  }
+
+  const keepFiles = [];
+  const deleteFiles = [];
+
+  pair.pairs.forEach(p => {
+    const f0 = p.file0;
+    const f1 = p.file1;
+    
+    const isF0Deleted = Array.from(document.querySelectorAll('.file-item')).find(item => item.dataset.path === f0.path)?.classList.contains('is-deleted');
+    const isF1Deleted = Array.from(document.querySelectorAll('.file-item')).find(item => item.dataset.path === f1.path)?.classList.contains('is-deleted');
+
+    if (f0.path.startsWith(keepDir)) {
+      if (!isF0Deleted) keepFiles.push(f0);
+      if (!isF1Deleted) deleteFiles.push(f1);
+    } else {
+      if (!isF1Deleted) keepFiles.push(f1);
+      if (!isF0Deleted) deleteFiles.push(f0);
+    }
+  });
+
+  filesToDeleteInGroup = deleteFiles;
+
+  modalFileListKeep.innerHTML = '';
+  keepFiles.forEach(file => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="modal-file-keep-name">${file.name}</div>
+      <div class="modal-file-keep-path">${file.path}</div>
+    `;
+    modalFileListKeep.appendChild(li);
+  });
+
+  modalFileListDelete.innerHTML = '';
+  deleteFiles.forEach(file => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="modal-file-delete-name">${file.name}</div>
+      <div class="modal-file-delete-path">${file.path}</div>
+    `;
+    modalFileListDelete.appendChild(li);
+  });
+
+  confirmModal.classList.add('active');
+}
+
 // Hide Modal
 function hideDeleteConfirmation() {
   confirmModal.classList.remove('active');
   fileToDelete = null;
   groupToDelete = null;
+  isFolderDelete = false;
+  folderPairIndexToDelete = null;
 }
 
 modalBtnCancel.addEventListener('click', hideDeleteConfirmation);
 
-// Confirm Delete (for both single and group deduplication)
+// Confirm Delete (for single, group, and folder-level deduplication)
 modalBtnConfirm.addEventListener('click', async () => {
   modalBtnConfirm.disabled = true;
   modalBtnConfirm.textContent = '正在清理...';
 
-  if (!isGroupDelete) {
+  if (isFolderDelete) {
+    // Folder batch de-duplication
+    const pair = activeMirrorFolders[folderPairIndexToDelete];
+    if (pair) {
+      let successCount = 0;
+      let failedFiles = [];
+      const deletedPaths = [];
+
+      for (const file of filesToDeleteInGroup) {
+        const success = await window.electronAPI.moveToTrash(file.path);
+        if (success) {
+          successCount++;
+          deletedPaths.push(file.path);
+        } else {
+          failedFiles.push(file.name);
+        }
+      }
+
+      if (successCount > 0) {
+        // Mark all deleted paths in UI as deleted, and update duplicatesData
+        deletedPaths.forEach(path => {
+          // Update duplicatesData
+          duplicatesData.forEach(group => {
+            const fIdx = group.files.findIndex(f => f.path === path);
+            if (fIdx !== -1) {
+              group.files.splice(fIdx, 1);
+            }
+          });
+
+          // Mark UI rows
+          const fileItemElement = Array.from(document.querySelectorAll('.file-item')).find(item => item.dataset.path === path);
+          if (fileItemElement) {
+            fileItemElement.classList.add('is-deleted');
+            const folderBtn = fileItemElement.querySelector('.btn-folder-action');
+            const trashBtn = fileItemElement.querySelector('.btn-trash-action');
+            const checkbox = fileItemElement.querySelector('.file-keep-checkbox');
+            if (folderBtn) folderBtn.style.pointerEvents = 'none';
+            if (trashBtn) trashBtn.style.pointerEvents = 'none';
+            if (checkbox) {
+              checkbox.checked = false;
+              checkbox.disabled = true;
+            }
+          }
+        });
+
+        // Remove duplicate groups that now have <= 1 file (or empty ads)
+        for (let i = duplicatesData.length - 1; i >= 0; i--) {
+          const group = duplicatesData[i];
+          const isAd = group.key === '[ADVERTISEMENT]';
+          const shouldRemoveCard = isAd ? group.files.length === 0 : group.files.length <= 1;
+
+          if (shouldRemoveCard) {
+            const groupCardElement = document.querySelector(`.duplicate-group[data-key="${group.key}"]`);
+            if (groupCardElement) {
+              groupCardElement.style.opacity = '0';
+              groupCardElement.style.transform = 'translateY(10px)';
+              groupCardElement.style.transition = 'all 0.3s ease';
+              const card = groupCardElement;
+              setTimeout(() => {
+                card.remove();
+                // Ensure correct sync indices
+                const currentIdx = duplicatesData.findIndex(g => g.key === group.key);
+                if (currentIdx !== -1) {
+                  duplicatesData.splice(currentIdx, 1);
+                }
+                updateSummaryAfterDeletion();
+              }, 300);
+            } else {
+              duplicatesData.splice(i, 1);
+            }
+          } else {
+            // Update stats for groups that still have multiple files
+            const groupCardElement = document.querySelector(`.duplicate-group[data-key="${group.key}"]`);
+            if (groupCardElement) {
+              const badge = groupCardElement.querySelector('.group-badge');
+              if (badge) badge.textContent = `${group.files.length} 个重复`;
+              
+              const sizes = group.files.map(f => f.size);
+              const maxSize = Math.max(...sizes);
+              const totalSize = sizes.reduce((a, b) => a + b, 0);
+              const wastedSize = totalSize - maxSize;
+              
+              const sizeTextElement = groupCardElement.querySelector('.group-info span strong');
+              if (sizeTextElement) sizeTextElement.textContent = formatBytes(wastedSize);
+            }
+          }
+        }
+
+        // Refresh mirror folders card
+        updateMirrorFolders();
+        updateSummaryAfterDeletion();
+      }
+
+      if (failedFiles.length > 0) {
+        alert(`镜像文件夹清理完毕，但有 ${failedFiles.length} 个文件删除失败，请手动确认：\n${failedFiles.join('\n')}`);
+      }
+    }
+  } else if (!isGroupDelete) {
     // Single file deletion
     if (fileToDelete) {
       const { filePath, element, groupKey } = fileToDelete;

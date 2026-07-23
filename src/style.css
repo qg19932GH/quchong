@@ -850,5 +850,107 @@ body {
   transform: scale(1.1);
 }
 
+/* Mirror folders section and card styles */
+.mirror-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+  animation: fadeIn 0.4s ease;
+}
+
+.mirror-card {
+  background: linear-gradient(135deg, #f0f4ff 0%, #e6eeff 100%);
+  border: 1px solid #cce0ff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 16px rgba(0, 74, 222, 0.04);
+}
+
+.mirror-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #d9e8ff;
+  padding-bottom: 10px;
+}
+
+.mirror-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary-dark);
+}
+
+.mirror-card-title-group h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.mirror-folder-icon {
+  color: var(--primary);
+}
+
+.badge-mirror {
+  background-color: #dbeafe;
+  color: #1e40af;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.mirror-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mirror-folder-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background-color: #ffffff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e1ecfe;
+}
+
+.mirror-folder-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.folder-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-width: 52px;
+}
+
+.folder-path {
+  font-size: 0.78rem;
+  color: var(--text-main);
+  font-family: Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-keep-folder {
+  padding: 5px 12px;
+  font-size: 0.72rem;
+  border-radius: 6px;
+  min-width: 100px;
+}
+
+
 
 
