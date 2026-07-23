@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>视频重复文件查找与清理工具</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-logo">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+        <div class="logo-text">
+          <h1>视频去重清理工具</h1>
+          <p>智能识别 FC2 & AV 番号，帮您发现并清理重复的视频文件</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="app-main">
+      <!-- Input Panel -->
+      <section class="control-panel">
+        <div class="drop-zone" id="dropZone">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="drop-icon">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <p class="drop-text">拖拽文件夹至此处，或 <span class="browse-link" id="btnSelectDir">点击浏览文件夹</span></p>
+          <p class="drop-subtext" id="selectedPathText">未选择任何文件夹</p>
+        </div>
+
+        <div class="action-bar">
+          <button id="btnStartScan" class="btn btn-primary" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            开始扫描
+          </button>
+          <button id="btnCancelScan" class="btn btn-danger" style="display: none;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
+              <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+            </svg>
+            取消扫描
+          </button>
+        </div>
+      </section>
+
+      <!-- Scanning Progress -->
+      <section id="scanProgressSection" class="progress-section" style="display: none;">
+        <div class="progress-card">
+          <div class="progress-header">
+            <span class="status-badge pulse-badge" id="scanStatus">正在扫描中...</span>
+            <span class="progress-details" id="progressDetailText">已扫描: 0 | 识别番号: 0</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="progressBarFill"></div>
+          </div>
+          <p class="current-dir-text text-truncate" id="currentDirText">当前目录: </p>
+        </div>
+      </section>
+
+      <!-- Results Panel -->
+      <section id="resultsSection" class="results-section" style="display: none;">
+        <div class="results-header">
+          <div class="results-summary">
+            <h3>查重结果</h3>
+            <p id="summaryText">共扫描到 0 个视频，发现 0 组重复视频。</p>
+          </div>
+          <div class="search-box">
+            <input type="text" id="searchInput" placeholder="搜索番号 (如 SSIS-023)..." />
+          </div>
+        </div>
+
+        <!-- Duplicate Groups List -->
+        <div class="duplicate-list" id="duplicateList">
+          <!-- Dynamically populated via renderer.js -->
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState" style="display: none;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="empty-icon">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <p>未发现重复的视频文件，所有视频的番号都是唯一的！</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer-bar">
+      <span>视频去重工具 v1.0.0</span>
+      <span>温馨提示：点击“移至回收站”会将重复文件移入系统回收站，可随时还原，安全防误删。</span>
+    </footer>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h4 id="modalTitle">确认删除文件</h4>
+      </div>
+      <!-- Single file deletion body -->
+      <div class="modal-body" id="modalBodySingle">
+        <p>您确定要将以下重复的视频文件移至回收站吗？</p>
+        <p class="modal-filename" id="modalFileName"></p>
+        <p class="modal-filepath" id="modalFilePath"></p>
+      </div>
+      <!-- Group deduplication body -->
+      <div class="modal-body" id="modalBodyGroup" style="display: none;">
+        <p>确定要对此重复组进行“一键去重”吗？系统将：</p>
+        <div class="modal-section-keep">
+          <div class="modal-section-title">
+            <span class="badge badge-success">保留 (最大视频)</span>
+          </div>
+          <p class="modal-filename-keep" id="modalFileNameKeep"></p>
+          <p class="modal-filepath-keep" id="modalFilePathKeep"></p>
+        </div>
+        <div class="modal-section-delete">
+          <div class="modal-section-title">
+            <span class="badge badge-danger">移至回收站 (清理重复)</span>
+          </div>
+          <ul class="modal-file-list-delete" id="modalFileListDelete">
+            <!-- Dynamically populated -->
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="modalBtnCancel">取消</button>
+        <button class="btn btn-danger" id="modalBtnConfirm">确认移至回收站</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

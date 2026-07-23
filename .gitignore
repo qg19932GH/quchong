@@ -1,0 +1,17 @@
+# Dependency directories
+node_modules/
+
+# Build outputs
+dist/
+out/
+
+# Mock videos and test folders
+mock_videos/
+test_spec.mp4
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+*.log
+Thumbs.db
