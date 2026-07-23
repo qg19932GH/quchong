@@ -77,10 +77,15 @@ ipcMain.on('cancel-scan', () => {
 
 ipcMain.handle('open-folder', async (event, filePath) => {
   try {
-    shell.showItemInFolder(filePath);
+    const stats = await fs.stat(filePath);
+    if (stats.isDirectory()) {
+      await shell.openPath(filePath);
+    } else {
+      shell.showItemInFolder(filePath);
+    }
     return true;
   } catch (err) {
-    console.error(`Failed to show item in folder: ${filePath}`, err);
+    console.error(`Failed to open path: ${filePath}`, err);
     return false;
   }
 });

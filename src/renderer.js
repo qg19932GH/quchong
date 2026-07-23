@@ -504,7 +504,7 @@ function updateMirrorFolders() {
   if (!mirrorSection) return;
   mirrorSection.innerHTML = '';
   
-  activeMirrorFolders = detectMirrorFolders(duplicatesData);
+  activeMirrorFolders = detectMirrorFolderGroups(duplicatesData);
   
   if (activeMirrorFolders.length === 0) {
     mirrorSection.style.display = 'none';
@@ -516,109 +516,197 @@ function updateMirrorFolders() {
   activeMirrorFolders.forEach((pair, index) => {
     const card = document.createElement('div');
     card.className = 'mirror-card';
+    card.dataset.index = index;
     card.innerHTML = `
       <div class="mirror-card-header">
         <div class="mirror-card-title-group">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mirror-folder-icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-          <h4>检测到镜像重复文件夹 (两文件夹包含多组相同视频)</h4>
+          <h4>检测到镜像重复文件夹组 (共 ${pair.directories.length} 个目录相互重复)</h4>
         </div>
-        <span class="badge-mirror">共 ${pair.count} 个视频完全相同</span>
+        <div class="mirror-card-actions-header" style="display:flex; align-items:center; gap: 12px;">
+          <span class="badge-mirror">涵盖 ${pair.keys.length} 组重复番号</span>
+          <button class="btn btn-primary btn-sm btn-batch-dedup-folders" data-index="${index}" style="background-color: var(--primary); border-color: var(--primary); color:#fff; font-weight:600; padding: 5px 14px; border-radius: 6px;">
+            一键去重文件夹
+          </button>
+        </div>
       </div>
       <div class="mirror-card-body">
-        <div class="mirror-folder-row">
-          <div class="mirror-folder-info">
-            <span class="folder-label" style="color:var(--success-text)">文件夹 A:</span>
-            <span class="folder-path" title="${pair.dirA}">${shortenPath(pair.dirA)}</span>
-          </div>
-          <button class="btn btn-primary btn-sm btn-keep-folder" data-keep="A" data-index="${index}" style="background-color: var(--success); border-color: var(--success); color:#fff;">
-            保留 A，清理 B
-          </button>
-        </div>
-        <div class="mirror-folder-row">
-          <div class="mirror-folder-info">
-            <span class="folder-label" style="color:var(--danger-text)">文件夹 B:</span>
-            <span class="folder-path" title="${pair.dirB}">${shortenPath(pair.dirB)}</span>
-          </div>
-          <button class="btn btn-primary btn-sm btn-keep-folder" data-keep="B" data-index="${index}">
-            保留 B，清理 A
-          </button>
-        </div>
+        ${pair.directories.map((dir, dIdx) => {
+          const isChecked = dIdx === 0;
+          return `
+            <div class="mirror-folder-row" data-path="${dir.replace(/"/g, '&quot;')}">
+              <div class="mirror-folder-info">
+                <input type="checkbox" class="folder-keep-checkbox" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; margin-right:8px; accent-color: var(--primary); cursor:pointer;" title="勾选保留该文件夹中的视频，未勾选的文件在一键去重时将被删除">
+                <span class="folder-label" style="${isChecked ? 'color:var(--success-text); font-weight:bold;' : 'color:var(--text-secondary); font-weight:bold;'}">
+                  ${isChecked ? '保留：' : '清理：'}
+                </span>
+                <span class="folder-path" title="${dir}">${shortenPath(dir)}</span>
+              </div>
+              <button class="btn btn-secondary btn-sm btn-open-folder" data-path="${dir.replace(/"/g, '&quot;')}" style="padding: 5px 10px; font-size: 0.72rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                打开目录
+              </button>
+            </div>
+          `;
+        }).join('')}
       </div>
     `;
-    mirrorSection.appendChild(card);
-  });
-
-  // Bind keep folder buttons click event
-  const keepFolderButtons = mirrorSection.querySelectorAll('.btn-keep-folder');
-  keepFolderButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = parseInt(btn.dataset.index);
-      const keep = btn.dataset.keep;
-      const pair = activeMirrorFolders[idx];
-      showFolderDeleteConfirmation(pair, keep, idx);
+    
+    // Bind checkbox change events for interactive labels
+    const checkboxes = card.querySelectorAll('.folder-keep-checkbox');
+    checkboxes.forEach(cb => {
+      cb.addEventListener('change', () => {
+        const row = cb.closest('.mirror-folder-row');
+        const label = row.querySelector('.folder-label');
+        if (cb.checked) {
+          label.textContent = '保留：';
+          label.style.color = 'var(--success-text)';
+        } else {
+          label.textContent = '清理：';
+          label.style.color = 'var(--text-secondary)';
+        }
+      });
     });
+
+    // Bind open folder action buttons
+    const openFolderButtons = card.querySelectorAll('.btn-open-folder');
+    openFolderButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const dirPath = btn.dataset.path;
+        window.electronAPI.openFolder(dirPath);
+      });
+    });
+
+    // Bind batch deduplication button click event
+    const batchButton = card.querySelector('.btn-batch-dedup-folders');
+    if (batchButton) {
+      batchButton.addEventListener('click', () => {
+        showFolderDeleteConfirmation(pair, index);
+      });
+    }
+
+    mirrorSection.appendChild(card);
   });
 }
 
-function detectMirrorFolders(duplicates) {
-  const pairMap = new Map();
+function detectMirrorFolderGroups(duplicates) {
+  const dirToKeys = new Map();
+  const dirToFiles = new Map();
 
   duplicates.forEach(group => {
     if (group.key === '[ADVERTISEMENT]') return;
 
-    for (let i = 0; i < group.files.length; i++) {
-      for (let j = i + 1; j < group.files.length; j++) {
-        const fileA = group.files[i];
-        const fileB = group.files[j];
-        
-        const dirA = fileA.path.substring(0, fileA.path.lastIndexOf(fileA.path.includes('\\') ? '\\' : '/'));
-        const dirB = fileB.path.substring(0, fileB.path.lastIndexOf(fileB.path.includes('\\') ? '\\' : '/'));
-        
-        if (dirA !== dirB) {
-          const sortedDirs = [dirA, dirB].sort();
-          const key = `${sortedDirs[0]}|${sortedDirs[1]}`;
-          
-          if (!pairMap.has(key)) {
-            pairMap.set(key, []);
-          }
-          
-          const fileInDir0 = fileA.path.startsWith(sortedDirs[0]) ? fileA : fileB;
-          const fileInDir1 = fileA.path.startsWith(sortedDirs[0]) ? fileB : fileA;
+    group.files.forEach(file => {
+      const dir = file.path.substring(0, file.path.lastIndexOf(file.path.includes('\\') ? '\\' : '/'));
+      if (!dirToKeys.has(dir)) {
+        dirToKeys.set(dir, new Set());
+        dirToFiles.set(dir, new Set());
+      }
+      dirToKeys.get(dir).add(group.key);
+      dirToFiles.get(dir).add(file.path);
+    });
+  });
 
-          pairMap.get(key).push({
-            file0: fileInDir0,
-            file1: fileInDir1,
-            groupKey: group.key
-          });
-        }
+  const dirs = Array.from(dirToKeys.keys());
+  const adj = new Map();
+  dirs.forEach(d => adj.set(d, new Set()));
+
+  // Connect directories sharing >= 2 duplicate keys
+  for (let i = 0; i < dirs.length; i++) {
+    for (let j = i + 1; j < dirs.length; j++) {
+      const dirA = dirs[i];
+      const dirB = dirs[j];
+      const keysA = dirToKeys.get(dirA);
+      const keysB = dirToKeys.get(dirB);
+
+      let intersectionCount = 0;
+      keysA.forEach(k => {
+        if (keysB.has(k)) intersectionCount++;
+      });
+
+      if (intersectionCount >= 2) {
+        adj.get(dirA).add(dirB);
+        adj.get(dirB).add(dirA);
+      }
+    }
+  }
+
+  const visited = new Set();
+  const groups = [];
+
+  dirs.forEach(dir => {
+    if (!visited.has(dir)) {
+      const component = [];
+      const queue = [dir];
+      visited.add(dir);
+
+      while (queue.length > 0) {
+        const u = queue.shift();
+        component.push(u);
+
+        adj.get(u).forEach(v => {
+          if (!visited.has(v)) {
+            visited.add(v);
+            queue.push(v);
+          }
+        });
+      }
+
+      if (component.length >= 2) {
+        const componentKeys = new Set();
+        component.forEach(d => {
+          dirToKeys.get(d).forEach(k => componentKeys.add(k));
+        });
+
+        let totalFilesCount = 0;
+        component.forEach(d => {
+          totalFilesCount += dirToFiles.get(d).size;
+        });
+
+        groups.push({
+          directories: component.sort(),
+          keys: Array.from(componentKeys),
+          totalFilesCount
+        });
       }
     }
   });
 
-  const mirrorFolders = [];
-  for (const [key, pairs] of pairMap.entries()) {
-    if (pairs.length >= 2) {
-      const [dirA, dirB] = key.split('|');
-      mirrorFolders.push({
-        dirA,
-        dirB,
-        count: pairs.length,
-        pairs
-      });
-    }
-  }
-
-  mirrorFolders.sort((a, b) => b.count - a.count);
-  return mirrorFolders;
+  groups.sort((a, b) => b.totalFilesCount - a.totalFilesCount);
+  return groups;
 }
 
-function showFolderDeleteConfirmation(pair, keep, pairIndex) {
+function showFolderDeleteConfirmation(pair, pairIndex) {
+  const card = document.querySelector(`.mirror-card[data-index="${pairIndex}"]`);
+  if (!card) return;
+
+  const keepDirs = [];
+  const deleteDirs = [];
+
+  const rows = card.querySelectorAll('.mirror-folder-row');
+  rows.forEach(row => {
+    const dirPath = row.dataset.path;
+    const checkbox = row.querySelector('.folder-keep-checkbox');
+    if (checkbox && checkbox.checked) {
+      keepDirs.push(dirPath);
+    } else {
+      deleteDirs.push(dirPath);
+    }
+  });
+
+  if (keepDirs.length === 0) {
+    alert('请至少勾选保留一个文件夹！如果想清理所有文件，请在主列表中手动操作。');
+    return;
+  }
+
+  if (deleteDirs.length === 0) {
+    alert('您已勾选保留所有文件夹，没有需要清理的文件。请取消勾选不需要的文件夹进行清理。');
+    return;
+  }
+
   isGroupDelete = false;
   isFolderDelete = true;
   folderPairIndexToDelete = pairIndex;
-  
-  const keepDir = keep === 'A' ? pair.dirA : pair.dirB;
-  const deleteDir = keep === 'A' ? pair.dirB : pair.dirA;
 
   modalTitle.textContent = '批量清理镜像文件夹';
   modalBodySingle.style.display = 'none';
@@ -637,24 +725,27 @@ function showFolderDeleteConfirmation(pair, keep, pairIndex) {
   const keepFiles = [];
   const deleteFiles = [];
 
-  pair.pairs.forEach(p => {
-    const f0 = p.file0;
-    const f1 = p.file1;
-    
-    const isF0Deleted = Array.from(document.querySelectorAll('.file-item')).find(item => item.dataset.path === f0.path)?.classList.contains('is-deleted');
-    const isF1Deleted = Array.from(document.querySelectorAll('.file-item')).find(item => item.dataset.path === f1.path)?.classList.contains('is-deleted');
+  pair.keys.forEach(key => {
+    const group = duplicatesData.find(g => g.key === key);
+    if (!group) return;
 
-    if (f0.path.startsWith(keepDir)) {
-      if (!isF0Deleted) keepFiles.push(f0);
-      if (!isF1Deleted) deleteFiles.push(f1);
-    } else {
-      if (!isF1Deleted) keepFiles.push(f1);
-      if (!isF0Deleted) deleteFiles.push(f0);
-    }
+    group.files.forEach(file => {
+      const isDeleted = Array.from(document.querySelectorAll('.file-item')).find(item => item.dataset.path === file.path)?.classList.contains('is-deleted');
+      if (isDeleted) return;
+
+      const fileDir = file.path.substring(0, file.path.lastIndexOf(file.path.includes('\\') ? '\\' : '/'));
+      
+      if (keepDirs.includes(fileDir)) {
+        keepFiles.push(file);
+      } else if (deleteDirs.includes(fileDir)) {
+        deleteFiles.push(file);
+      }
+    });
   });
 
   filesToDeleteInGroup = deleteFiles;
 
+  // Render Keep Files list in modal
   modalFileListKeep.innerHTML = '';
   keepFiles.forEach(file => {
     const li = document.createElement('li');
@@ -665,6 +756,7 @@ function showFolderDeleteConfirmation(pair, keep, pairIndex) {
     modalFileListKeep.appendChild(li);
   });
 
+  // Render Delete Files list in modal
   modalFileListDelete.innerHTML = '';
   deleteFiles.forEach(file => {
     const li = document.createElement('li');
