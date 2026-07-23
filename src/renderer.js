@@ -39,6 +39,8 @@ let filesToDeleteInGroup = [];
 let isFolderDelete = false;
 let folderPairIndexToDelete = null;
 let activeMirrorFolders = [];
+let folderKeepDirs = [];
+let folderDeleteDirs = [];
 
 // Helper: Format Bytes to human readable
 function formatBytes(bytes) {
@@ -707,11 +709,18 @@ function showFolderDeleteConfirmation(pair, pairIndex) {
   isGroupDelete = false;
   isFolderDelete = true;
   folderPairIndexToDelete = pairIndex;
+  folderKeepDirs = keepDirs;
+  folderDeleteDirs = deleteDirs;
 
   modalTitle.textContent = '批量清理镜像文件夹';
   modalBodySingle.style.display = 'none';
   modalBodyGroup.style.display = 'flex';
   modalBodyGroup.style.flexDirection = 'column';
+
+  const groupPrompt = modalBodyGroup.querySelector('p');
+  if (groupPrompt) {
+    groupPrompt.innerHTML = `确定要批量合并并清理镜像文件夹吗？系统将删除未勾选文件夹中的重复视频，并<strong>自动将里面的所有非视频文件（如字幕、海报图片等）剪切合并移动至保留文件夹</strong>中，随后将清理完的空文件夹移入回收站。`;
+  }
 
   const keepSection = confirmModal.querySelector('.modal-section-keep');
   const deleteTitle = confirmModal.querySelector('.modal-section-delete .modal-section-title span');
@@ -805,6 +814,14 @@ modalBtnConfirm.addEventListener('click', async () => {
       }
 
       if (successCount > 0) {
+        // Merge remaining files (subtitles, posters, etc.) from folderDeleteDirs to first folderKeepDirs
+        const targetKeepDir = folderKeepDirs[0];
+        if (targetKeepDir) {
+          for (const deleteDir of folderDeleteDirs) {
+            await window.electronAPI.cleanFolderWithMerge(deleteDir, targetKeepDir);
+          }
+        }
+
         // Mark all deleted paths in UI as deleted, and update duplicatesData
         deletedPaths.forEach(path => {
           // Update duplicatesData

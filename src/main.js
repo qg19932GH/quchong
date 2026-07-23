@@ -108,6 +108,71 @@ ipcMain.handle('move-to-trash', async (event, filePath) => {
   }
 });
 
+ipcMain.handle('clean-folder-with-merge', async (event, deleteDir, keepDir) => {
+  try {
+    // Helper to recursively merge and clean
+    async function merge(currentDeleteDir) {
+      try {
+        await fs.access(currentDeleteDir);
+      } catch (e) {
+        return;
+      }
+
+      const entries = await fs.readdir(currentDeleteDir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const sourcePath = path.join(currentDeleteDir, entry.name);
+        const relativePath = path.relative(deleteDir, sourcePath);
+        const targetPath = path.join(keepDir, relativePath);
+
+        if (entry.isDirectory()) {
+          // Recursively merge subdirectories
+          await merge(sourcePath);
+        } else {
+          // It's a file
+          try {
+            // Check if file exists in keepDir
+            const targetExists = await fs.access(targetPath).then(() => true).catch(() => false);
+            
+            if (targetExists) {
+              // Delete duplicate file
+              try {
+                await shell.trashItem(sourcePath);
+              } catch (err) {
+                await fs.unlink(sourcePath);
+              }
+            } else {
+              // Move file to keepDir
+              await fs.mkdir(path.dirname(targetPath), { recursive: true });
+              await fs.rename(sourcePath, targetPath);
+            }
+          } catch (err) {
+            console.error(`Failed to merge file: ${sourcePath} -> ${targetPath}`, err);
+          }
+        }
+      }
+    }
+
+    // Run recursive merge
+    await merge(deleteDir);
+
+    // Now delete the empty directory deleteDir
+    try {
+      await shell.trashItem(deleteDir);
+    } catch (err) {
+      try {
+        await fs.rm(deleteDir, { recursive: true, force: true });
+      } catch (rmErr) {
+        console.error(`Failed to remove empty folder: ${deleteDir}`, rmErr);
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error(`Failed to clean folder with merge: ${deleteDir} -> ${keepDir}`, err);
+    return false;
+  }
+});
+
 // Scan helper
 async function scanDirectory(dirPath, event) {
   let scannedCount = 0;

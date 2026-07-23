@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelScan: () => ipcRenderer.send('cancel-scan'),
   openFolder: (filePath) => ipcRenderer.invoke('open-folder', filePath),
   moveToTrash: (filePath) => ipcRenderer.invoke('move-to-trash', filePath),
+  cleanFolderWithMerge: (deleteDir, keepDir) => ipcRenderer.invoke('clean-folder-with-merge', deleteDir, keepDir),
   onScanProgress: (callback) => {
     // Wrap callback to strip event argument
     const subscription = (event, data) => callback(data);
